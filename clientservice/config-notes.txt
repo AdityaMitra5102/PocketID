@@ -1,0 +1,9 @@
+Install Python, and the dependencies in requirements.txt
+
+For windows you can start the service by running run.bat, for Linux by run.sh.
+
+Make this into a service with schtasks command and set the startup type to be automatic if you want to use this service always. You can disable this service from Windows services.
+
+For Linux, use systemd for the same.
+
+This service needs to be active during use.

@@ -1,0 +1,30 @@
+Install RPi OS. Set up your wifi during OS installation from RPi Imager. SSH into the RPi.
+DO NOT UPDATE OR UPGRADE APT AFTER INSTALLING RPI OS. It breaks the USB port at the time of developing this application.
+
+Install the dependencies from apt
+python3 python3-dev python3-pip python3-flask 
+
+Install the dependencies from pip3 (Both as normal user as well as sudo) (Ignore environment warning)
+fido2 pickle-mixin Flask-Cors
+
+The files physicalidd, physicalid-conf and the templates folder should be in /usr/bin. The permissions should have +x. Best if 755
+
+The files physicalidd.service and physicalidconf.service should go in /etc/systemd/system
+Enable them with sudo systemctl enable.... and start them with sudo systemctl start......
+
+The hostname should be pocketid as set from sudo raspi-config.
+
+Setup shellinabox by installing it from apt, enabling and starting the systemd service.
+
+Verify everything is working. 
+
+Install UFW firewall. Enable the ports 5000, 4200, 8080. (5000 is the main service port, 4200 is the shell in a box port, 8080 is the config portal port.)
+(Beware, the firewall may kill SSH. So ensure shell in a box is working to reach the terminal).
+
+Start the firewall.
+
+Make sure you can reach the config page at https://pocketid.local:8080.
+
+Connect the Security key and set up the security key pin on the config portal before you can start using the device.
+
+Note: Trying to set up incorrect pin more than 3 times may render your security key to be blocked. And it risks being reset.

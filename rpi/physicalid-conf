@@ -1,0 +1,98 @@
+#! /usr/bin/python3
+from flask import *
+import crypt
+import pwd
+import spwd
+import subprocess
+
+from fido2.hid import CtapHidDevice
+from fido2.client import Fido2Client, WindowsClient, UserInteraction
+from fido2.server import Fido2Server
+from getpass import getpass
+import sys
+import ctypes
+
+class CliInteraction(UserInteraction):
+	def prompt_up(self):
+		print("\nTouch your authenticator device now...\n")
+
+	def request_pin(self, permissions, rd_id):
+		global pin
+		print("Using pin ", pin)
+		return pin
+
+	def request_uv(self, permissions, rd_id):
+		print("User Verification required.")
+		return True
+
+def verifypin():
+	try:
+		server = Fido2Server({"id": "example.com", "name": "Example RP"}, attestation="direct")
+		dev = next(CtapHidDevice.list_devices(), None)
+		if not dev:
+			return False, "No device connected"
+		client = Fido2Client(dev, "https://example.com", user_interaction=CliInteraction())
+		user = {"id": b"user_id", "name": "A. User"}
+		options, _ = server.register_begin(user, user_verification='preferred', authenticator_attachment="cross-platform")
+		result = client.make_credential(options["publicKey"])
+		return True, "Success"
+	except:
+		return False, "Invalid PIN or other error"
+	
+
+app = Flask(__name__)
+
+def verify_user(username, password):
+	try:
+		user_info = pwd.getpwnam(username)
+		shadow_entry = spwd.getspnam(username)
+		stored_password = shadow_entry.sp_pwdp
+		encrypted_password = crypt.crypt(password, stored_password)
+		if encrypted_password == stored_password:
+			return True, "Success"
+		else:
+			return False, "Incorrect password"
+	except KeyError:
+		return False, "User does not exist"
+
+@app.route("/logs", methods=["GET","POST"])
+def get_logs():
+	try:
+		f=open('/etc/physicalidd-config/logs.txt','r')
+		x=f.read()
+		f.close()
+		return x
+	except:
+		return "No logs"
+
+@app.route("/list_usb", methods=["GET", "POST"])
+def list_usb():
+	devices = subprocess.check_output(["lsusb"]).decode("utf-8")
+	return devices
+	
+@app.route("/changepin", methods=["GET","POST"])
+def usercreds():
+	global pin
+	username=request.form.get('username').strip()
+	psk=request.form.get('password').strip()
+	pin=request.form.get('pin').strip()
+	val, status=verify_user(username,psk)
+	if val:
+		val2, status2=verifypin()
+		if val2:
+			f = open("/etc/physicalidd-config/pin.conf", "w")
+			f.write(pin)
+			f.close()
+			return "Pin successfully added/changed"
+		else:
+			return status2
+	else:
+		return status
+		
+@app.route("/", methods=["GET", "POST"])
+def index():
+	return render_template('config.html')
+
+if __name__== '__main__':
+	app.run(ssl_context='adhoc', host='0.0.0.0', port=8080)
+

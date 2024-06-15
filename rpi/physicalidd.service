@@ -1,0 +1,12 @@
+[Unit]
+Description=Physical ID Daemon
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/physicalidd
+Restart=always
+User=root
+
+
+[Install]
+WantedBy=multi-user.target

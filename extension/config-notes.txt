@@ -1,0 +1,1 @@
+Install this extension on your browser to use the service. You can disable this extension when you need to use security keys or passkeys the normal way.

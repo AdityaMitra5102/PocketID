@@ -1,0 +1,137 @@
+#! /usr/bin/python3
+from __future__ import print_function, absolute_import, unicode_literals
+from flask import *
+from fido2.hid import CtapHidDevice
+from fido2.ctap import CtapError, STATUS
+from fido2.client import Fido2Client, UserInteraction
+from fido2.server import Fido2Server
+import sys
+import os
+from fido2.webauthn import PublicKeyCredentialRpEntity, PublicKeyCredentialUserEntity
+from fido2 import cbor
+import base64
+import json
+import pickle
+import time
+app = Flask(__name__)
+
+
+class CliInteraction(UserInteraction):
+	def prompt_up(self):
+		print("\nTouch your authenticator device now...\n")
+
+
+	def request_pin(self, permissions, rd_id):
+		f = open("/etc/physicalidd-config/pin.conf", "r")
+		pin=f.read().strip()
+		f.close()
+		return pin
+
+	def request_uv(self, permissions, rd_id):
+		print("User Verification required.")
+		return True
+
+def runauth(optdatab64):
+	optdata=pickle.loads(base64.b64decode(optdatab64.encode()))
+	optionsb64=optdata['optionsb64']
+	origin=optdata['url']
+	options=pickle.loads(base64.b64decode(optionsb64.encode()))
+	chal=options['challenge']
+	print(chal)
+	rpid=options['rpId']
+	print(rpid)
+	dev = next(CtapHidDevice.list_devices(), None)
+	if not dev:
+		print("No FIDO device found")
+		sys.exit(1)
+	#server = Fido2Server({"id": rpid, "name": rpid}, attestation="direct")
+	client = Fido2Client(dev, origin, user_interaction=CliInteraction())
+	#options, _ = server.authenticate_begin(user_verification='preferred')
+	#options2=options['publicKey']
+	print(options)
+	result = client.get_assertion(options)
+	result = result.get_response(0)
+	print(result)
+	credid=result.credential_id
+	clntdata=result.client_data
+	authdata=result.authenticator_data
+	sign=result.signature
+	tp=clntdata.type
+	chal=clntdata.challenge
+	chalb64=base64.urlsafe_b64encode(chal).decode()
+	chalb64=chalb64.strip("=")
+	orig=clntdata.origin
+	clntDatarr=barrToArr(clntdata)
+	rpidhash=authdata.rp_id_hash
+	adat=barrToArr(rpidhash)
+	adat.append(authdata.flags)
+	counter=authdata.counter.to_bytes(4)
+	for xx in counter:
+		adat.append(xx)
+	resp={}
+	resp['authenticatorData']=adat
+	resp['clientDataJSON']=clntDatarr
+	resp['signature']=barrToArr(sign)
+	if (result.user_handle):
+		resp['userHandle']=barrToArr(result.user_handle)
+	#print(sign)
+	pkcred={}
+	pkcred['authenticatorAttachment']='platform'
+	pkcred['rawId']=barrToArr(credid)
+	pkcred['id']=base64.urlsafe_b64encode(credid).decode().strip("=")
+	pkcred['type']='public-key'
+	pkcred['response']=resp
+	log(rpid)
+	return base64.b64encode(pickle.dumps(pkcred)).decode()
+
+def barrToArr(barr):
+	arr=[x for x in barr]
+	return arr
+
+import crypt
+import pwd
+import spwd
+from time import gmtime, strftime
+
+def log(rpid):
+	ctime=strftime("%Y-%m-%d %H:%M:%S", gmtime())
+	ctime=ctime+" UTC"
+	ctime=ctime+" ---"+rpid+"\n"
+	f=open('/etc/physicalidd-config/logs.txt', 'a')
+	f.write(ctime)
+	f.close()
+
+
+def verify_user(username, password):
+	try:
+		user_info = pwd.getpwnam(username)
+		shadow_entry = spwd.getspnam(username)
+		stored_password = shadow_entry.sp_pwdp
+		encrypted_password = crypt.crypt(password, stored_password)
+		if encrypted_password == stored_password:
+			return True
+		else:
+			return False
+	except KeyError:
+		print("User not found.")
+		return False
+
+@app.route("/verifyuser", methods=["GET","POST"])
+def usercreds():
+	username=request.form.get('username')
+	psk=request.form.get('password')
+	val=verify_user(username,psk)
+	if val:
+		return "Verified"
+	else:
+		return "Invalid user"
+
+@app.route("/getoptions", methods=["GET", "POST"])
+def getOptions():
+	txt1=request.form.get('data')
+	pkcred=runauth(txt1)
+	return pkcred
+
+if __name__=="__main__":
+	app.run(host="0.0.0.0", port=5000)
+
