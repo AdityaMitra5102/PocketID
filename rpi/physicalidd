@@ -102,29 +102,9 @@ def log(rpid):
 	f.close()
 
 
-def verify_user(username, password):
-	try:
-		user_info = pwd.getpwnam(username)
-		shadow_entry = spwd.getspnam(username)
-		stored_password = shadow_entry.sp_pwdp
-		encrypted_password = crypt.crypt(password, stored_password)
-		if encrypted_password == stored_password:
-			return True
-		else:
-			return False
-	except KeyError:
-		print("User not found.")
-		return False
-
-@app.route("/verifyuser", methods=["GET","POST"])
-def usercreds():
-	username=request.form.get('username')
-	psk=request.form.get('password')
-	val=verify_user(username,psk)
-	if val:
-		return "Verified"
-	else:
-		return "Invalid user"
+@app.route("/", methods=["GET", "POST"])
+def index():
+	return "Pocket ID Daemon active."
 
 @app.route("/getoptions", methods=["GET", "POST"])
 def getOptions():
